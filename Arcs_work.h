@@ -37,6 +37,7 @@ namespace ARCS {
         std::string fofName;
         int seq_id;
         int min_reads;
+	int k_value;
         int min_links;
         int min_size;
         std::string base_name;
@@ -47,9 +48,11 @@ namespace ARCS {
         float error_percent;
         int verbose;
 
-        ArcsParams() : file(), fofName(), seq_id(98), min_reads(5), min_links(0), min_size(500), base_name(""), min_mult(50), max_mult(10000), max_degree(0), end_length(0), error_percent(0.05), verbose(0) {}
+        ArcsParams() : file(), fofName(), seq_id(98), min_reads(5), k_value(30), min_links(0), min_size(500), base_name(""), min_mult(50), max_mult(10000), max_degree(0), end_length(0), error_percent(0.05), verbose(0) {}
 
     };
+
+	typedef std::string Kmer; 
 
     /* ContigKMap: <k-mer, pair(contig id, bool), hash<k-mer>, eqstr>
      * 	k-mer = string sequence
@@ -57,7 +60,7 @@ namespace ARCS {
      *  bool = True for Head; False for Tail
      *  eqstr = equal key 
      */ 
-	typedef google::sparse_hash_map<std::string, pair<std::string, bool>> ContigKMap; 
+	typedef google::sparse_hash_map<Kmer, pair<std::string, bool>> ContigKMap; 
 
     /* ScafMap: <pair(scaffold id, bool), count>, cout =  # times index maps to scaffold (c), bool = true-head, false-tail*/
     typedef std::map<std::pair<std::string, bool>, int> ScafMap;

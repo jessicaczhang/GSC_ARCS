@@ -25,6 +25,8 @@ static const char USAGE_MESSAGE[] =
 "             index must be included in read name in the format read1_indexA\n"
 "   -s  Minimum sequence identity (min. required to include the read's scaffold alignment in the graph file, default: 98)\n"
 "   -c  Minimum number of mapping read pairs/Index required before creating edge in graph. (default: 5)\n"
+// add k-value required by the user
+"   -k  k-value for the size of a k-mer. (default: 30) (required)\n"
 "   -l  Minimum number of links to create edge in graph (default: 0)\n"
 "   -z  Minimum contig length to consider for scaffolding (default: 500)\n"
 "   -b  Base name for your output files (optional)\n"
@@ -37,7 +39,7 @@ static const char USAGE_MESSAGE[] =
 
 ARCS::ArcsParams params;
 
-static const char shortopts[] = "f:a:s:c:l:z:b:m:d:e:r:v";
+static const char shortopts[] = "f:a:s:c:k:l:z:b:m:d:e:r:v";
 
 enum { OPT_HELP = 1, OPT_VERSION};
 
@@ -46,6 +48,7 @@ static const struct option longopts[] = {
     {"fofName", required_argument, NULL, 'a'},
     {"seq_id", required_argument, NULL, 's'}, 
     {"min_reads", required_argument, NULL, 'c'},
+    {"k_value", required_argument, NULL, 'k'}, 
     {"min_links", required_argument, NULL, 'l'},
     {"min_size", required_argument, NULL, 'z'},
     {"base_name", required_argument, NULL, 'b'},
@@ -58,6 +61,42 @@ static const struct option longopts[] = {
     {"help", no_argument, NULL, OPT_HELP},
     { NULL, 0, NULL, 0 }
 };
+
+/* Helper that flips A T G C (T A C G respectively) */
+char flipBase(char base) {
+	if (base == 'A' || base == 'a') {
+		return 'T'; 
+	} else if (base == 'T' || base == 't') {
+		return 'A';
+	} else if (base == 'G' || base == 'g') {
+		return 'C';  
+	} else if (base == 'C' || base == 'c') {
+		return 'G';
+	} else {
+		std::cerr << "Error: Not a base character." << std::endl; 
+		return 'N'; // holder for mistake
+	}
+} 
+
+
+/* Returns the reverse complement as a sequence string
+ * 	std::string 			sequence
+ */ 
+std::string getReverseComplement(std::string sequence) {
+
+	std::string rcsequence = ""; 	
+	std::string seq = sequence;
+
+	int sequence_length = sequence.length(); 
+	for (int i = sequence_length-1; i >= 0; i--) {
+		char sequence_char = sequence.at(i); 
+		//std::cout << sequence_char;  
+		char flipped_char = flipBase(sequence_char); 
+		//std::cout << flipped_char << std::endl; 
+		rcsequence.push_back(flipped_char); 
+	}
+	return rcsequence; 
+}
 
 /* Shreds end sequence into kmers and inputs them one by one into the ContigKMap 
  * 	std::pair<std::string, bool> 				specifies contigID and head/tail 
@@ -78,9 +117,12 @@ void mapKmers(std::pair<std::string, bool> contigIdentity, std::string seqToKmer
 	} else {
 		//assert(seqsize >= k); 
 		std::string kmerseq; 
-		for (int i = seqsize; i >= k; i--) {
-			kmerseq = seqToKmerize.substr(i - k, i); 
+		std::string rckmerseq;
+		for (int i = 0; i <= seqsize - k; i++) {
+			kmerseq = seqToKmerize.substr(i, k); 
+			rckmerseq = getReverseComplement(kmerseq); 
 			kmap[kmerseq] = contigIdentity; 
+			kmap[rckmerseq] = contigIdentity; 
 		}
 	}
 }
@@ -634,6 +676,7 @@ void runArcs() {
         << "\n -a " << params.fofName
         << "\n -s " << params.seq_id 
         << "\n -c " << params.min_reads 
+	<< "\n -k " << params.k_value
         << "\n -l " << params.min_links     
         << "\n -z " << params.min_size
         << "\n -b " << params.base_name
@@ -648,12 +691,19 @@ void runArcs() {
 
     // initialize ContigKMap
     ARCS::ContigKMap kmap; 
+    kmap.set_deleted_key(NULL); 
 
     ARCS::IndexMap imap;
     ARCS::PairMap pmap;
     ARCS::Graph g;
 
     std::time_t rawtime;
+
+    // Read contig file, shred sequences into k-mers, and then map them 
+    time(&rawtime); 
+    std::cout << "\n=>Storing Kmers from Contig ends... " << ctime(&rawtime); 
+    getContigKmers(params.file, kmap, params.k_value); 
+
 
     std::unordered_map<std::string, int> scaffSizeMap;
     time(&rawtime);
@@ -697,6 +747,8 @@ int main(int argc, char** argv) {
                 arg >> params.seq_id; break;
             case 'c':
                 arg >> params.min_reads; break;
+	    case 'k':
+		arg >> params.k_value; break; 
             case 'l':
                 arg >> params.min_links; break;
             case 'z':
@@ -756,6 +808,7 @@ int main(int argc, char** argv) {
         filename << params.file << ".scaff" 
             << "_s" << params.seq_id 
             << "_c" << params.min_reads
+	    << "_k" << params.k_value
             << "_l" << params.min_links 
             << "_d" << params.max_degree 
             << "_e" << params.end_length
