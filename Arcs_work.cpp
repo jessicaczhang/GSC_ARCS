@@ -27,6 +27,8 @@ static const char USAGE_MESSAGE[] =
 "   -c  Minimum number of mapping read pairs/Index required before creating edge in graph. (default: 5)\n"
 // add k-value required by the user
 "   -k  k-value for the size of a k-mer. (default: 30) (required)\n"
+// add shift between k-mers (optional supplied by user)
+"   -g  shift between k-mers (default: 1)\n"
 "   -l  Minimum number of links to create edge in graph (default: 0)\n"
 "   -z  Minimum contig length to consider for scaffolding (default: 500)\n"
 "   -b  Base name for your output files (optional)\n"
@@ -105,7 +107,7 @@ std::string getReverseComplement(std::string sequence) {
  *	ARCS::ContigKMap					ContigKMap for storage of kmers
  */
 void mapKmers(std::pair<std::string, bool> contigIdentity, std::string seqToKmerize, 
-		int k, ARCS::ContigKMap& kmap) {
+		int k, int k_shift, ARCS::ContigKMap& kmap) {
 
 	int seqsize = seqToKmerize.length(); 
 
@@ -118,11 +120,14 @@ void mapKmers(std::pair<std::string, bool> contigIdentity, std::string seqToKmer
 		//assert(seqsize >= k); 
 		std::string kmerseq; 
 		std::string rckmerseq;
-		for (int i = 0; i <= seqsize - k; i++) {
+		int shift = k_shift; 
+		int i = 0; 
+		while (i <= seqsize - k) {
 			kmerseq = seqToKmerize.substr(i, k); 
 			rckmerseq = getReverseComplement(kmerseq); 
 			kmap[kmerseq] = contigIdentity; 
 			kmap[rckmerseq] = contigIdentity; 
+		i += shift; 
 		}
 	}
 }
@@ -132,7 +137,7 @@ void mapKmers(std::pair<std::string, bool> contigIdentity, std::string seqToKmer
  *	std::sparse_hash_map<k-mer, pair<contidID, bool>> 	ContigKMap
  *	int k							k-value (specified by user)
  */ 
-void getContigKmers(std::string file, ARCS::ContigKMap& kmap, int k){
+void getContigKmers(std::string file, ARCS::ContigKMap& kmap, int k, int k_shift){
 
 	//int counter = 0; 
 	gzFile fp; 
@@ -166,9 +171,9 @@ void getContigKmers(std::string file, ARCS::ContigKMap& kmap, int k){
 			//get ends of the sequence and put k-mers into the map
 			std::string seqend; 
 			seqend = sequence.substr(0, cutOff); 
-			mapKmers(headside, seqend, k, kmap); 
+			mapKmers(headside, seqend, k, k_shift, kmap); 
 			seqend = sequence.substr(cutOff, sequence_length); 
-			mapKmers(tailside, seqend, k, kmap); 
+			mapKmers(tailside, seqend, k, k_shift, kmap); 
 		}
 	}
 	gzclose(fp); 
@@ -677,6 +682,7 @@ void runArcs() {
         << "\n -s " << params.seq_id 
         << "\n -c " << params.min_reads 
 	<< "\n -k " << params.k_value
+	<< "\n -g " << params.k_shift
         << "\n -l " << params.min_links     
         << "\n -z " << params.min_size
         << "\n -b " << params.base_name
@@ -702,7 +708,7 @@ void runArcs() {
     // Read contig file, shred sequences into k-mers, and then map them 
     time(&rawtime); 
     std::cout << "\n=>Storing Kmers from Contig ends... " << ctime(&rawtime); 
-    getContigKmers(params.file, kmap, params.k_value); 
+    getContigKmers(params.file, kmap, params.k_value, params.k_shift); 
 
 
     std::unordered_map<std::string, int> scaffSizeMap;
@@ -749,6 +755,8 @@ int main(int argc, char** argv) {
                 arg >> params.min_reads; break;
 	    case 'k':
 		arg >> params.k_value; break; 
+	    case 'g':
+		arg >> params.k_shift; break; 
             case 'l':
                 arg >> params.min_links; break;
             case 'z':
